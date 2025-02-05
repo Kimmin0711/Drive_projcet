@@ -73,7 +73,7 @@ for t in range(2, 27):
     value_text = value.text.replace(',', '')
     if value_text.isdigit():
         value_number = int(value_text)
-        raw_data.append([town_check.text, value_text])
+        raw_data.append([town_check.text, value_number])
     time.sleep(2)
 # print(raw_data)
 
