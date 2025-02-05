@@ -1,164 +1,120 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from bs4 import BeautifulSoup
 import pandas as pd
-import time
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
 
-# ChromeDriver 설정
-chrome_options = Options()
-chrome_options.add_argument("--headless")  # 브라우저 창 없이 실행
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--no-sandbox")
+# 한글설정
+path = "Pretendard-Regular.ttf"
+font = font_manager.FontProperties(fname=path)
 
-# ChromeDriver 자동 설치 및 설정
-service = Service(ChromeDriverManager().install())
-driver = webdriver.Chrome(service=service)
+file_name = "AccidentReport.csv"
+df = pd.read_csv(file_name, encoding="cp949")
 
-# 사이트 접속
-url = "https://taas.koroad.or.kr/gis/mcm/mcl/initMap.do?menuId=GIS_GMP_AGS_TMM#"
-driver.get(url)
+df.columns = df.columns.str.strip()  # 결측값 제거
+df = df.astype(str)  # 모든 값을 문자열로 변환
 
-# 페이지가 로드될 때까지 대기
-time.sleep(3)
+# 서울만 따로 분리해서 저장
+def filter_city(city):
+    df["시도"] = df["시도"].str.strip()
+    category = df[df.astype(str).apply(lambda x: x.str.contains("사고유형", na=False)).any(axis=1)]
+    specific = df[df.astype(str).apply(lambda x: x.str.contains("세부유형", na=False)).any(axis=1)]
+    sido = df.loc[df["시도"] == city]
 
-# 사고분석 탭으로 이동
-tab = driver.find_element(By.XPATH, '//*[@id="menuPartSearch"]')
-tab.click()
+    with open(f"{city}시 데이터 필터링.csv", "w", encoding="utf-8") as file:
+        file.write(category.to_csv(index=False))
+        file.write(specific.to_csv(index=False))
+        file.write(sido.to_csv(index=False))
 
-time.sleep(3)
+filter_city("서울")
 
-# -----------------------------------------------------------------
-# '사고년도' 설정 함수
-def set_year(start, end):
-    year_start = driver.find_element(By.XPATH, '//*[@id="ptsRafYearStart"]')
-    year_start.click()
-    num = driver.find_element(By.XPATH, start)
-    num.click()
-    year_end = driver.find_element(By.XPATH, '//*[@id="ptsRafYearEnd"]')
-    year_end.click()
-    num = driver.find_element(By.XPATH, end)
-    num.click()
-    print("사고년도 설정 완료")
+# --------------------------------------------------------------------
 
-# '시도', '시군구' 선택
-def set_city(sido, sigungu):
-    select = driver.find_element(By.XPATH, '//*[@id="ptsRafSido"]')
-    select.click()
-    sel_sido = driver.find_element(By.XPATH, sido)
-    sel_sido.click()
-    select = driver.find_element(By.XPATH, '//*[@id="ptsRafSigungu"]')
-    select.click()
-    sel_sigungu = driver.find_element(By.XPATH, sigungu)
-    sel_sigungu.click()
+# '조건설정' + '사고 유형'별 함수 (사망사고, 중상사고, ...) (차대사람-횡단사고, ..., 차대차-...)
+
+file_name = "서울시 데이터 필터링.csv"
+df = pd.read_csv(file_name, encoding="utf-8")
 
 # ----------------------------------------------------------------
-# '조건설정' 클릭 함수
-def filter_click(xpath):
-    death_button = driver.find_element(By.XPATH, xpath)  
-    death_button.click()
-    print("조건설정 완료")
-    time.sleep(1)
+
+# 1. 전체 - 사망사고, 중상사고, ... 비율
+categories = ["사망사고", "중상사고", "경상사고", "부상신고"]
+conditions = ["사망[명]", "(중상자[명])", "(경상자[명])", "(부상신고자[명])"]
+
+def filter_type(type):
+    accident_df = df[df[df.columns[2]] == f"{type}"]
+    with open("데이터 필터링.csv", "w", encoding="utf-8") as file:
+        file.write(accident_df.to_csv(index=False))
+    # 숫자 열만 선택하기
+    cols_to_sum = accident_df.columns[3:]  # 첫 두 열 제외하고 나머지 열들
+    # 모든 열에서 '-'를 NaN으로 변환 후, 숫자형으로 변환
+    df_cleaned = accident_df[cols_to_sum].replace("-", pd.NA).apply(pd.to_numeric, errors='coerce')
+    # 숫자들만 합산
+    total_sum = df_cleaned.sum().sum()
+    print(f"{type} 건수 합: {total_sum}")
+
+    return total_sum
+
+data = [filter_type(conditions[0]), filter_type(conditions[1]), filter_type(conditions[2]), filter_type(conditions[3])]
+
+## - 바 그래프 사용
+plt.figure(figsize=(10, 6))  # 그래프 크기 설정
+plt.bar(categories, data, color=["red", "orange", "yellow", "green"])  # 사고 유형별 색상 적용
+
+plt.title("2021~2023년 사고 종류별 건수 현황", fontsize=16, pad=10, fontproperties=font)
+plt.xlabel("사고 조건", fontproperties=font)
+plt.ylabel("건수", fontproperties=font)
+plt.xticks(fontproperties=font)  # 한글 폰트 적용
+
+plt.grid(axis="y", linestyle="--", alpha=0.7)  # y축 점선 표시
+plt.show()
 
 # ----------------------------------------------------------------
-# 모든 필터 '전체해제' 선택 함수
-def deSelect(category, desel):
-    condition_btn = driver.find_element(By.XPATH, category)
-    condition_btn.click()
-    deselect = driver.find_element(By.XPATH, desel)
-    deselect.click()
-    print("전체해제 클릭")
 
-def all_deSelect():
-    ## '사고유형' 필터
-    deSelect('//*[@id="ptsRaf-ACDNT_CODE"]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/ul/li[1]/div/p/a[2]')
-    ## '법규위반' 필터
-    deSelect('//*[@id="ptsRaf-LRG_VIOLT_1_CODE"]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/ul/li[2]/div/p/a[2]')
-    ## '가해차종' 필터
-    deSelect('//*[@id="ptsRaf-WRNGDO_VHCLE_ASORT_CODE"]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/ul/li[3]/div/p/a[2]')
-    ## '월별' 필터
-    deSelect('//*[@id="ptsRaf-ACDNT_DD_DC"]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/ul/li[4]/div/p/a[2]')
-    ## '도로종류' 필터
-    deSelect('//*[@id="ptsRaf-ROAD_TYPE"]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/ul/li[5]/div/p/a[2]')
-    ## '노면상태' 필터
-    deSelect('//*[@id="ptsRaf-RDSE_STTUS_CODE"]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/ul/li[6]/div/p/a[2]')
-    ## '기상상태' 필터
-    deSelect('//*[@id="ptsRaf-WETHER_STTUS_CODE"]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/ul/li[7]/div/p/a[2]')
-    ## '도로형태' 필터
-    deSelect('//*[@id="ptsRaf-ROAD_STLE_CODE"]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/ul/li[8]/div/p/a[2]')
-    print("모두 전체해제 완료")
+# 2. 사고별 - 차대차, 차대사람, 차량간, 철길건널목 비율
+accident_types = ["차대차", "차대사람", "차량단독", "철길건널목"]
 
-# ----------------------------------------------------------------
-# '사고 유형'별 선택 함수
-def condition_click(xpath):
-    ## '사고유형' 버튼 클릭
-    category_btn = driver.find_element(By.XPATH, '//*[@id="ptsRaf-ACDNT_CODE"]')
-    category_btn.click()
-    ## 세부유형 체크
-    specific_check = driver.find_element(By.XPATH, xpath)
-    specific_check.click()
-    ## 검색
-    search = driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[2]/p/a')
-    search.click()
-    print("검색 완료")
+# "사고[건]"인 행 필터링
+accident_df = df[df[df.columns[2]] == "사고[건]"]
 
-# ----------------------------------------------------------------
-# 페이지 소스 가져와서 데이터 추출 및 csv로 저장
-def get_accident_data():
-    # 페이지 소스 가져오기
-    soup = BeautifulSoup(driver.page_source, "html.parser")
+# 사고 유형별 합산
+## 사고유형 행
+category_row = df[df[df.columns[2]] == "사고유형"]
 
-    # 사고 데이터 추출
-    accident_data = []
-    accidents = soup.find_all("div", class_="accident-item")  # 사고 목록이 담긴 요소 찾기 (CSS 클래스 확인 필요)
+## 두 DataFrame을 세로로 결합 (위아래로 붙이기)
+combined_df = pd.concat([category_row, accident_df], ignore_index=True)
 
-    for accident in accidents:
-        print(accident)
-        # location = accident.find("span", class_="location").text.strip()
-        # date = accident.find("span", class_="date").text.strip()
-        # num_deaths = accident.find("span", class_="deaths").text.strip()
+## 두 번째 행 가져오기
+second_row = combined_df.iloc[0]
 
-        # accident_data.append([location, date, num_deaths])
+## "차대차" 등을 포함하는 열 찾기
+def get_category(category):
+    columns_with_car_vs_car = second_row[second_row.str.contains(f"{category}", na=False)].index
 
-    # # 데이터프레임으로 변환
-    # df = pd.DataFrame(accident_data, columns=["위치", "날짜", "사망자 수"])
+    # 해당 열들의 값을 합산 (숫자값만)
+    values = []
+    for col in columns_with_car_vs_car:
+        values.append(combined_df[col])
+    # 숫자만 포함된 값으로 변환 후 합산
+    sum = 0
+    for val in values:
+        # 쉼표를 제거하고 숫자형으로 변환
+        cleaned_values = val.replace(",", "").apply(pd.to_numeric, errors='coerce')
+        sum += cleaned_values.sum()
 
-    # # CSV 파일로 저장
-    # df.to_csv("death_accidents_car_vs_car.csv", index=False, encoding="utf-8-sig")
+    print(f"{category}의 건수 합: {sum}")
+    return sum
 
-    # print("데이터 저장 완료!")
+df_accident = [get_category("차대차"), get_category("차대사람"), get_category("차량단독"), get_category("철길건널목")]
 
+# 바 그래프 그리기
+plt.figure(figsize=(10, 6))  # 그래프 크기 설정
+plt.bar(accident_types, df_accident, color=["red", "blue", "green", "purple"])  # 사고 유형별 색상 적용
 
-# ----------------------------------------------------------------
-# 1. 연도 설정 
-### 2021년 ~ 2023년
-set_year('/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[1]/fieldset/div[1]/p/select[1]/option[3]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[1]/fieldset/div[1]/p/select[2]/option[1]')
-time.sleep(3)
+plt.title("사고 유형별 건수 현황", fontsize=16, pad=10, fontproperties=font)
+plt.xlabel("사고 유형", fontproperties=font)
+plt.ylabel("건수(개)", fontproperties=font)
+plt.xticks(fontproperties=font)  # 한글 폰트 적용
 
-# 2. 시도, 시군구 설정
-### 서울특별시, 전체
-set_city('/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[1]/fieldset/div[2]/select/option[1]', '/html/body/div[1]/div[2]/div[1]/div/div/div[2]/div/div[2]/div[2]/div[1]/div[1]/fieldset/div[3]/select/option[1]')
-time.sleep(3)
+plt.grid(axis="y", linestyle="--", alpha=0.7)  # y축 점선 표시
+plt.show()
 
-# 3. 조건설정
-# filter_click('//*[@id="ptsRafCh1AccidentContent"]/li[1]/input') # 사망사고는 기본 체크
-# time.sleep(3)
-
-# 4. 필터 전체 해제
-all_deSelect()
-time.sleep(3)
-
-# 5. 세부 필터 설정 및 검색
-condition_click('//*[@id="ptsRafCh2AccidentType"]/li[1]/ul/li[1]/span/input') # 횡단중
-time.sleep(3)
-
-# 6. 페이지 소스 가져와서 데이터 추출 및 csv로 저장
-get_accident_data()
-time.sleep(3)
-
-# 7. 브라우저 종료
-driver.quit()
+# 3. 사고세부 - 차대차>무슨 사고, ... 전부 비교 > 꺾은 선 그래프
