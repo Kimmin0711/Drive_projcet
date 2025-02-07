@@ -38,6 +38,7 @@ for i in range(1, 5):  # 1부터 4까지의 체크박스
         # 체크상태로 만들기
         checkbox.click()
         time.sleep(1)
+        
 # 처음 강남구 값 출력
 test = driver.find_element(By.XPATH, '//*[@id="ptsRafSigungu"]')
 test.click()
@@ -62,8 +63,8 @@ for t in range(2, 27):
     search = driver.find_element(By.XPATH, '//*[@id="regionAccidentFind"]/div[2]/p/a')
     search.click()
     time.sleep(5)
-
-# 값이 바뀌기 전까지 최대 30초 대기
+    
+    # 값이 바뀌기 전까지 최대 30초 대기
     value_xpath = '//*[@id="regionAccidentFind"]/div[3]/div[1]/span'
     value = WebDriverWait(driver, 30).until(
         EC.visibility_of_element_located((By.XPATH, value_xpath)))
@@ -75,12 +76,10 @@ for t in range(2, 27):
         value_number = int(value_text)
         raw_data.append([town_check.text, value_number])
     time.sleep(2)
-# print(raw_data)
 
 # 지도 시각화
 import folium
 import pandas as pd
-
 
 # 서울시 구 지도데이터
 geo_json = 'https://raw.githubusercontent.com/southkorea/seoul-maps/master/kostat/2013/json/seoul_municipalities_geo_simple.json'
@@ -89,12 +88,10 @@ data = pd.DataFrame(raw_data, columns=['name', 'value'])
 map = folium.Map(
     location=[37.566345, 126.977893],  # 서울시 위치
     zoom_start=11,
-    # tiles='CartoDB Positron',
     )
 
 folium.Choropleth(
     geo_data=geo_json,
-    # name='choropleth',
     data=data,
     columns=['name', 'value'],
     # geo_json 안에 있는 데이터 값을 지정
