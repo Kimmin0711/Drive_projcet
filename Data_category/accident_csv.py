@@ -27,11 +27,24 @@ def filter_city(city):
 
 filter_city("서울")
 
+def filter_sigungu(name):
+    df["시군구"] = df["시군구"].str.strip()
+    category = df[df.astype(str).apply(lambda x: x.str.contains("사고유형", na=False)).any(axis=1)]
+    specific = df[df.astype(str).apply(lambda x: x.str.contains("세부유형", na=False)).any(axis=1)]
+    sigungu = df.loc[df["시군구"] == name]
+
+    with open(f"{name} 데이터 필터링.csv", "w", encoding="utf-8") as file:
+        file.write(category.to_csv(index=False))
+        file.write(specific.to_csv(index=False))
+        file.write(sigungu.to_csv(index=False))
+
+filter_sigungu("강남구")
 # --------------------------------------------------------------------
 
 # '조건설정' + '사고 유형'별 함수 (사망사고, 중상사고, ...) (차대사람-횡단사고, ..., 차대차-...)
 
-file_name = "서울시 데이터 필터링.csv"
+# file_name = "서울시 데이터 필터링.csv"
+file_name = "강남구 데이터 필터링.csv"
 df = pd.read_csv(file_name, encoding="utf-8")
 
 # ----------------------------------------------------------------
